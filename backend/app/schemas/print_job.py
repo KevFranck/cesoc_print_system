@@ -21,10 +21,13 @@ class PrintJobRead(BaseModel):
     client_id: int
     station_id: int
     session_id: int | None
+    document_id: int | None
     document_name: str
     page_count: int
     status: str
     administrative_context: str
+    printer_name: str | None
+    failure_reason: str | None
     submitted_at: datetime
     printed_at: datetime | None
     client_name: str | None = None

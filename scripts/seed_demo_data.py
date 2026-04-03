@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-"""Script de demonstration a executer une fois le backend configure."""
+"""Script de demonstration a executer une fois le backend configure.
+
+Il cree quelques postes et utilisateurs borne pour faciliter les tests manuels.
+"""
 
 import httpx
 
@@ -25,7 +28,7 @@ def main() -> None:
 
     for client in clients:
         try:
-            httpx.post(f"{BASE_URL}/clients", json=client, timeout=5.0)
+            httpx.post(f"{BASE_URL}/users", json=client, timeout=5.0)
         except httpx.HTTPError:
             pass
 

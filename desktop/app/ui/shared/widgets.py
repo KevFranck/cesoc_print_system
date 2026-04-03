@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QScrollArea, QVBoxLayout, QWidget
 
 
 class PageHeader(QFrame):
@@ -85,30 +86,42 @@ class SectionCard(QFrame):
         layout.addWidget(self.content)
 
 
-class ToolbarCard(QFrame):
-    def __init__(self, title: str, subtitle: str, button_text: str | None = None) -> None:
+class FormField(QWidget):
+    """Bloc de formulaire moderne avec libellé au-dessus du champ.
+
+    On évite ici le rendu très brut de `QFormLayout` pour obtenir des panneaux
+    de saisie plus lisibles, mieux espacés et visuellement cohérents avec le
+    reste de l'interface admin.
+    """
+
+    def __init__(self, label: str, field: QWidget) -> None:
         super().__init__()
-        self.setObjectName("TopBar")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
-        text_block = QVBoxLayout()
-        title_label = QLabel(title)
-        title_label.setObjectName("CardTitle")
-        subtitle_label = QLabel(subtitle)
-        subtitle_label.setObjectName("MutedText")
-        subtitle_label.setWordWrap(True)
-        text_block.addWidget(title_label)
-        text_block.addWidget(subtitle_label)
-        layout.addLayout(text_block, 1)
-
-        self.action_button = None
-        if button_text:
-            self.action_button = QPushButton(button_text)
-            layout.addWidget(self.action_button)
+        title = QLabel(label)
+        title.setObjectName("FormLabel")
+        layout.addWidget(title)
+        layout.addWidget(field)
 
 
 class SearchField(QLineEdit):
     def __init__(self, placeholder: str) -> None:
         super().__init__()
         self.setPlaceholderText(placeholder)
+
+
+class ScrollSection(QScrollArea):
+    """Zone scrollable réutilisable pour garder les formulaires accessibles.
+
+    Les pages admin utilisent ce wrapper pour que les panneaux latéraux restent
+    utilisables même sur des écrans plus petits ou quand la fenêtre est réduite.
+    """
+
+    def __init__(self, content: QWidget) -> None:
+        super().__init__()
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # type: ignore[name-defined]
+        self.setWidget(content)

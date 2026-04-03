@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, time, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from app.models.client import Client
 from app.models.print_job import PrintJob
 from app.models.station import Station
 from app.models.station_session import StationSession
-from app.schemas.dashboard import DashboardSummary
+from app.schemas.dashboard import DashboardPeriodPoint, DashboardReport, DashboardSummary, DashboardTopUser
 
 
 class DashboardService:
@@ -67,3 +69,128 @@ class DashboardService:
             occupied_stations=occupied_stations,
             quota_alert_clients=quota_alert_clients,
         )
+
+    def get_report(self, period: str) -> DashboardReport:
+        """Construit un rapport agrégé pour l'admin.
+
+        Pour ce MVP, l'agrégation est faite côté service Python. Cela reste
+        lisible, facile à faire évoluer et largement suffisant pour les volumes
+        attendus d'un centre local.
+        """
+
+        if period not in {"daily", "monthly", "yearly"}:
+            period = "daily"
+
+        jobs = self._get_report_jobs()
+        grouped_metrics: dict[str, dict[str, int | set[int]]] = defaultdict(
+            lambda: {
+                "jobs_count": 0,
+                "pages_count": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "unique_users": set(),
+            }
+        )
+        users_metrics: dict[int, dict[str, int | str | None]] = defaultdict(
+            lambda: {
+                "user_id": 0,
+                "client_name": "Utilisateur inconnu",
+                "email": None,
+                "jobs_count": 0,
+                "pages_count": 0,
+                "failed_count": 0,
+            }
+        )
+
+        total_jobs = 0
+        total_pages = 0
+        success_count = 0
+        failed_count = 0
+        unique_users: set[int] = set()
+
+        for job in jobs:
+            label = self._build_period_label(job.submitted_at, period)
+            metrics = grouped_metrics[label]
+            metrics["jobs_count"] = int(metrics["jobs_count"]) + 1
+            metrics["pages_count"] = int(metrics["pages_count"]) + int(job.page_count)
+            if job.status == "printed":
+                metrics["success_count"] = int(metrics["success_count"]) + 1
+                success_count += 1
+            if job.status == "failed":
+                metrics["failed_count"] = int(metrics["failed_count"]) + 1
+                failed_count += 1
+            unique_bucket = metrics["unique_users"]
+            if isinstance(unique_bucket, set):
+                unique_bucket.add(job.client_id)
+
+            total_jobs += 1
+            total_pages += int(job.page_count)
+            unique_users.add(job.client_id)
+
+            user_metrics = users_metrics[job.client_id]
+            user_metrics["user_id"] = job.client_id
+            user_metrics["client_name"] = (
+                f"{job.client.first_name} {job.client.last_name}" if job.client else "Utilisateur inconnu"
+            )
+            user_metrics["email"] = job.client.email if job.client else None
+            user_metrics["jobs_count"] = int(user_metrics["jobs_count"]) + 1
+            user_metrics["pages_count"] = int(user_metrics["pages_count"]) + int(job.page_count)
+            if job.status == "failed":
+                user_metrics["failed_count"] = int(user_metrics["failed_count"]) + 1
+
+        period_points = [
+            DashboardPeriodPoint(
+                label=label,
+                jobs_count=int(metrics["jobs_count"]),
+                pages_count=int(metrics["pages_count"]),
+                success_count=int(metrics["success_count"]),
+                failed_count=int(metrics["failed_count"]),
+                unique_users=len(metrics["unique_users"]) if isinstance(metrics["unique_users"], set) else 0,
+            )
+            for label, metrics in sorted(grouped_metrics.items(), key=lambda item: item[0], reverse=True)
+        ]
+
+        top_users = sorted(
+            (
+                DashboardTopUser(
+                    user_id=int(metrics["user_id"]),
+                    client_name=str(metrics["client_name"]),
+                    email=str(metrics["email"]) if metrics["email"] else None,
+                    jobs_count=int(metrics["jobs_count"]),
+                    pages_count=int(metrics["pages_count"]),
+                    failed_count=int(metrics["failed_count"]),
+                )
+                for metrics in users_metrics.values()
+            ),
+            key=lambda item: (item.pages_count, item.jobs_count),
+            reverse=True,
+        )[:8]
+
+        return DashboardReport(
+            period=period,  # type: ignore[arg-type]
+            totals=self.get_summary(),
+            report_jobs_count=total_jobs,
+            report_pages_count=total_pages,
+            success_count=success_count,
+            failed_count=failed_count,
+            unique_users=len(unique_users),
+            average_pages_per_job=round(total_pages / total_jobs, 2) if total_jobs else 0.0,
+            period_points=period_points,
+            top_users=top_users,
+        )
+
+    def _get_report_jobs(self) -> list[PrintJob]:
+        stmt = (
+            select(PrintJob)
+            .options(selectinload(PrintJob.client))
+            .order_by(PrintJob.submitted_at.desc())
+        )
+        return list(self.db.scalars(stmt))
+
+    def _build_period_label(self, submitted_at: datetime, period: str) -> str:
+        current = submitted_at.astimezone(timezone.utc)
+        if period == "yearly":
+            return current.strftime("%Y")
+        if period == "monthly":
+            return current.strftime("%Y-%m")
+        return current.strftime("%Y-%m-%d")

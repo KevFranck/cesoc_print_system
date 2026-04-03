@@ -1,5 +1,13 @@
 {
   "api_base_url": "http://127.0.0.1:8000/api/v1",
   "station_code": "POSTE-01",
-  "station_secret": "optional-shared-secret"
+  "station_secret": "optional-shared-secret",
+  "printer_name": "Microsoft Print to PDF",
+  "pdf_print_tool_path": "C:/Tools/SumatraPDF/SumatraPDF.exe",
+  "local_document_root": "runtime_documents",
+  "imap_host": "imap.gmail.com",
+  "imap_port": 993,
+  "imap_username": "franckkevinowona8@gmail.com",
+  "imap_password": "xlhr twaf nxhq xtoz",
+  "mailbox_name": "INBOX"
 }

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from pathlib import Path
+
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.services.api_client import ApiClient
 from app.services.dashboard_service import AdminDashboardService
-from app.ui.shared.widgets import PageHeader, SearchField
+from app.ui.shared.widgets import PageHeader, ScrollSection, SearchField
 
 
 class HistoryPage(QWidget):
@@ -13,7 +15,12 @@ class HistoryPage(QWidget):
         self.setObjectName("Page")
         self.service = AdminDashboardService(api_client)
         self.jobs: list[dict] = []
-        layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(16)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
         layout.addWidget(PageHeader("Historique", "Suivi des demandes d'impression et filtrage rapide."))
@@ -22,12 +29,17 @@ class HistoryPage(QWidget):
         self.search = SearchField("Rechercher par client, poste, document ou contexte")
         self.search.textChanged.connect(self._render_table)
         filter_row.addWidget(self.search)
+        export_button = QPushButton("Exporter l'historique CSV")
+        export_button.clicked.connect(self._export_history)
+        filter_row.addWidget(export_button)
         layout.addLayout(filter_row)
 
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["Document", "Client", "Poste", "Pages", "Statut", "Contexte"])
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setMinimumHeight(460)
         layout.addWidget(self.table)
+        root_layout.addWidget(ScrollSection(content))
         self.refresh()
 
     def refresh(self) -> None:
@@ -53,3 +65,9 @@ class HistoryPage(QWidget):
             self.table.setItem(row, 3, QTableWidgetItem(str(job.get("page_count", 0))))
             self.table.setItem(row, 4, QTableWidgetItem(job.get("status", "")))
             self.table.setItem(row, 5, QTableWidgetItem(job.get("administrative_context", "")))
+
+    def _export_history(self) -> None:
+        target, _ = QFileDialog.getSaveFileName(self, "Exporter l'historique", "cesoc-history.csv", "CSV (*.csv)")
+        if not target:
+            return
+        self.service.export_jobs_csv(self.jobs, Path(target))

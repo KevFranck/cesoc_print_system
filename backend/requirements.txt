@@ -5,6 +5,7 @@ httpx==0.28.1
 psycopg2-binary==2.9.11
 pydantic==2.12.5
 pydantic-settings==2.11.0
+pypdf==5.4.0
 python-dotenv==1.2.2
 sqlalchemy==2.0.48
 uvicorn==0.42.0

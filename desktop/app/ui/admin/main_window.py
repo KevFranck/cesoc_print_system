@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
 from app.services.api_client import ApiClient
 from app.ui.admin.pages.clients_page import ClientsPage
 from app.ui.admin.pages.dashboard_page import DashboardPage
 from app.ui.admin.pages.history_page import HistoryPage
-from app.ui.admin.pages.sessions_page import SessionsPage
-from app.ui.admin.pages.stations_page import StationsPage
 
 
 class AdminMainWindow(QMainWindow):
@@ -15,6 +16,9 @@ class AdminMainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("CESOC Print System - Admin")
         self.resize(1440, 920)
+        logo_path = Path(__file__).resolve().parents[2] / "assets" / "cesoc-logo.svg"
+        if logo_path.exists():
+            self.setWindowIcon(QIcon(str(logo_path)))
 
         shell = QWidget()
         shell.setObjectName("AppShell")
@@ -31,8 +35,6 @@ class AdminMainWindow(QMainWindow):
         self.pages = [
             DashboardPage(api_client),
             ClientsPage(api_client),
-            StationsPage(api_client),
-            SessionsPage(api_client),
             HistoryPage(api_client),
         ]
         for page in self.pages:
@@ -49,6 +51,13 @@ class AdminMainWindow(QMainWindow):
         layout.setContentsMargins(20, 22, 20, 22)
         layout.setSpacing(10)
 
+        logo_path = Path(__file__).resolve().parents[2] / "assets" / "cesoc-logo.svg"
+        if logo_path.exists():
+            logo = QLabel()
+            logo.setObjectName("LogoMark")
+            logo.setPixmap(QIcon(str(logo_path)).pixmap(96, 96))
+            layout.addWidget(logo)
+
         brand = QLabel("CESOC")
         brand.setObjectName("SidebarTitle")
         subtitle = QLabel("Console d'administration")
@@ -57,7 +66,7 @@ class AdminMainWindow(QMainWindow):
         layout.addWidget(subtitle)
         layout.addSpacing(20)
 
-        labels = ["Dashboard", "Clients", "Postes", "Sessions", "Historique"]
+        labels = ["Dashboard", "Utilisateurs", "Historique"]
         self.nav_buttons: list[QPushButton] = []
         for index, label in enumerate(labels):
             button = QPushButton(label)

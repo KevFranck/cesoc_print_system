@@ -23,3 +23,10 @@ def list_print_jobs(db: Session = Depends(get_db)) -> list[PrintJobRead]:
 @router.get("/today", response_model=list[PrintJobRead])
 def list_today_print_jobs(db: Session = Depends(get_db)) -> list[PrintJobRead]:
     return PrintJobService(db).list_today_jobs()
+
+
+@router.get("/user/{user_id}", response_model=list[PrintJobRead])
+def list_user_print_jobs(user_id: int, db: Session = Depends(get_db)) -> list[PrintJobRead]:
+    """Retourne l'historique d'impression d'un utilisateur donné."""
+
+    return PrintJobService(db).list_jobs_for_user(user_id)

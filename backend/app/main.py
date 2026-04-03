@@ -7,14 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.db.base import Base
 from app.db.init_db import init_db
-from app.db.session import SessionLocal, engine
+from app.db.session import SessionLocal
+from app import models as _models  # noqa: F401  # force l'enregistrement de toutes les tables SQLAlchemy
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         init_db(db)

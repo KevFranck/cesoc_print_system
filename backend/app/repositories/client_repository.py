@@ -12,6 +12,8 @@ from app.repositories.base import BaseRepository
 
 
 class ClientRepository(BaseRepository):
+    """Accès à la table des usagers / utilisateurs de la borne."""
+
     def create(self, client: Client) -> Client:
         self.db.add(client)
         self.db.commit()
@@ -31,6 +33,10 @@ class ClientRepository(BaseRepository):
 
     def get_by_id(self, client_id: int) -> Client | None:
         return self.db.get(Client, client_id)
+
+    def get_by_email(self, email: str) -> Client | None:
+        stmt = select(Client).where(func.lower(Client.email) == email.lower())
+        return self.db.scalar(stmt)
 
     def get_printed_pages_today(self, client_id: int) -> int:
         now = datetime.now(timezone.utc)

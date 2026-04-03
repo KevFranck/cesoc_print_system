@@ -9,6 +9,13 @@ from app.models.app_setting import AppSetting
 
 
 def init_db(db: Session) -> None:
+    """Crée les données système minimales au démarrage.
+
+    Cette initialisation reste volontairement limitée : elle évite d'écraser les
+    données existantes et se contente d'assurer la présence des comptes et
+    réglages indispensables au MVP.
+    """
+
     if not db.query(AdminUser).filter(AdminUser.username == settings.default_admin_username).first():
         db.add(
             AdminUser(
