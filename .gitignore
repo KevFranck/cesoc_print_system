@@ -9,6 +9,8 @@ __pycache__/
 .vscode/
 .env
 .env.local
+backend/.env
+desktop/app/config/client_config.json
 
 backend/venv/
 desktop/venv/
