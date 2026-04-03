@@ -63,6 +63,8 @@ class PrintJobService:
         station_code: str,
         printer_name: str | None,
         administrative_context: str,
+        selected_page_count: int | None = None,
+        selected_pages: str | None = None,
     ) -> PrintJobRead:
         client = self.client_repository.get_by_id(document.owner_client_id or 0)
         if not client:
@@ -73,14 +75,16 @@ class PrintJobService:
         active_session = self.session_repository.get_active_for_station(station.id)
         if not active_session or active_session.client_id != client.id:
             raise ValidationError("Le poste n'a pas de session active correspondant a cet utilisateur.")
-        self.quota_service.ensure_pages_available(client, document.page_count)
+        effective_page_count = selected_page_count or document.page_count
+        self.quota_service.ensure_pages_available(client, effective_page_count)
         job = PrintJob(
             client_id=client.id,
             station_id=station.id,
             session_id=active_session.id,
             document_id=document.id,
             document_name=document.original_filename,
-            page_count=document.page_count,
+            page_count=effective_page_count,
+            selected_pages=selected_pages,
             administrative_context=administrative_context,
             printer_name=printer_name,
             status="queued",

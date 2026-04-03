@@ -42,12 +42,14 @@ class ConfigService:
 
     @staticmethod
     def load_client_station_config() -> ClientStationConfig:
-        config_path = Path(__file__).resolve().parent.parent / "config" / "client_config.json"
-        if not config_path.exists():
-            example_path = Path(__file__).resolve().parent.parent / "config" / "client_config.example.json"
-            if example_path.exists():
-                raw = json.loads(example_path.read_text(encoding="utf-8"))
+        config_dir = Path(__file__).resolve().parent.parent / "config"
+        candidate_paths = [
+            config_dir / "client_config.local.json",
+            config_dir / "client_config.json",
+            config_dir / "client_config.example.json",
+        ]
+        for config_path in candidate_paths:
+            if config_path.exists():
+                raw = json.loads(config_path.read_text(encoding="utf-8"))
                 return ClientStationConfig(**raw)
-            return ClientStationConfig(api_base_url="http://127.0.0.1:8000/api/v1", station_code="POSTE-01")
-        raw = json.loads(config_path.read_text(encoding="utf-8"))
-        return ClientStationConfig(**raw)
+        return ClientStationConfig(api_base_url="http://127.0.0.1:8000/api/v1", station_code="POSTE-01")

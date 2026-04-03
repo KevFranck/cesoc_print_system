@@ -24,6 +24,7 @@ class PrintJobRead(BaseModel):
     document_id: int | None
     document_name: str
     page_count: int
+    selected_pages: str | None
     status: str
     administrative_context: str
     printer_name: str | None

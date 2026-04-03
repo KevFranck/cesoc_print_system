@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from app.services.api_client import ApiClient
+from app.services.api_client import ApiClient, ApiError
 
 
 class AdminDashboardService:
@@ -45,7 +45,7 @@ class AdminDashboardService:
         return data if isinstance(data, dict) else {}
 
     def get_clients(self) -> list[dict]:
-        data = self.api_client.safe_get("/users", [])
+        data = self.api_client.get("/users")
         return data if isinstance(data, list) else []
 
     def get_stations(self) -> list[dict]:
@@ -76,8 +76,21 @@ class AdminDashboardService:
         return self.api_client.safe_post("/print-jobs", payload)
 
     def get_quota_status(self, user_id: int) -> dict:
-        data = self.api_client.safe_get(f"/users/{user_id}/quota-status", {})
+        data = self.api_client.get(f"/users/{user_id}/quota-status")
         return data if isinstance(data, dict) else {}
+
+    def test_users_endpoint(self) -> tuple[bool, str]:
+        """Aide l'UI admin à diagnostiquer clairement un problème de chargement."""
+
+        try:
+            data = self.api_client.get("/users")
+        except ApiError as exc:
+            return False, exc.message
+        except Exception as exc:  # pragma: no cover - diagnostic UI only
+            return False, str(exc)
+        if not isinstance(data, list):
+            return False, "La route /users a repondu avec un format inattendu."
+        return True, f"{len(data)} utilisateur(s) recu(s) depuis l'API."
 
     def grant_bonus_pages(self, user_id: int, payload: dict) -> dict | None:
         return self.api_client.safe_post(f"/users/{user_id}/grant-bonus-pages", payload)

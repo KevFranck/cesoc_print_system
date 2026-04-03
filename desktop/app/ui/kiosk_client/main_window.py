@@ -201,12 +201,6 @@ class KioskMainWindow(QMainWindow):
             button.clicked.connect(lambda checked=False, m=method, l=label: self._load_documents(m, l))
             layout.addWidget(button)
             self.busy_widgets.append(button)
-
-        switch_user_button = QPushButton("Changer d'utilisateur")
-        switch_user_button.setObjectName("SecondaryButton")
-        switch_user_button.clicked.connect(self._logout_user)
-        layout.addWidget(switch_user_button)
-        self.busy_widgets.append(switch_user_button)
         layout.addStretch(1)
         return page
 
@@ -298,6 +292,9 @@ class KioskMainWindow(QMainWindow):
         self.quota_summary = QLabel("")
         self.quota_summary.setObjectName("KioskText")
 
+        self.page_selection_input = QLineEdit()
+        self.page_selection_input.setPlaceholderText("Pages a imprimer: toutes ou ex: 1-3,5")
+
         self.context_input = QLineEdit()
         self.context_input.setPlaceholderText("Exemple: CAF, titre de sejour, CV")
 
@@ -313,6 +310,7 @@ class KioskMainWindow(QMainWindow):
 
         info_layout.addWidget(self.preview_summary)
         info_layout.addWidget(self.quota_summary)
+        info_layout.addWidget(self.page_selection_input)
         info_layout.addWidget(self.context_input)
         info_layout.addStretch(1)
         info_layout.addWidget(back_button)
@@ -490,6 +488,7 @@ class KioskMainWindow(QMainWindow):
         self.quota_summary.setText(
             f"Quota restant: {quota.get('remaining_pages', 0)} / {quota.get('effective_quota', 0)} pages"
         )
+        self.page_selection_input.clear()
 
         self.current_pdf_document = self.workflow.preview_service.create_pdf_document(registered.local_path)
         if self.pdf_view is not None:
@@ -518,7 +517,20 @@ class KioskMainWindow(QMainWindow):
         self._set_busy(True)
         context_label = self.context_input.text().strip() or "Demarche administrative"
         try:
-            job, result = self.workflow.print_registered_document(self.state.registered_document, context_label)
+            normalized_selection, selected_page_count = self.workflow.resolve_page_selection(
+                self.state.registered_document.page_count,
+                self.page_selection_input.text().strip() or None,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Pages invalides", str(exc))
+            self._set_busy(False)
+            return
+        try:
+            job, result = self.workflow.print_registered_document(
+                self.state.registered_document,
+                context_label,
+                normalized_selection,
+            )
         except ApiError as exc:
             QMessageBox.warning(self, "Erreur API", exc.message)
             self._set_busy(False)
@@ -532,6 +544,8 @@ class KioskMainWindow(QMainWindow):
         self.result_message.setText(
             f"Document: {self.state.registered_document.original_filename}\n"
             f"Job #{job.get('id')}\n"
+            f"Pages imprimees: {selected_page_count}\n"
+            f"Selection: {normalized_selection or 'Toutes les pages'}\n"
             f"{result.message}\n\nLa session va maintenant se fermer pour proteger vos documents."
         )
         self._goto(self.result_page)
@@ -547,6 +561,7 @@ class KioskMainWindow(QMainWindow):
         self.auto_logout_timer.stop()
         self.email_input.clear()
         self.documents_list.clear()
+        self.page_selection_input.clear()
         self.context_input.clear()
         self.documents_context.setText("Choisissez un document a imprimer.")
         self.document_summary.setText("Selectionnez un document PDF.")
@@ -568,6 +583,7 @@ class KioskMainWindow(QMainWindow):
         self.state.registered_document = None
         self.current_pdf_document = None
         self._reset_document_selection()
+        self.page_selection_input.clear()
         self.context_input.clear()
         self.auto_logout_timer.stop()
         self._goto(self.method_page)
@@ -577,6 +593,7 @@ class KioskMainWindow(QMainWindow):
 
         self.state.registered_document = None
         self.current_pdf_document = None
+        self.page_selection_input.clear()
         self.context_input.clear()
         self.preview_status.setText("")
         self.auto_logout_timer.stop()

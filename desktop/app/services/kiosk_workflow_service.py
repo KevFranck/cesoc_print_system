@@ -13,7 +13,7 @@ from app.services.usb_monitor_service import LocalPdfDocument, UsbMonitorService
 
 @dataclass(slots=True)
 class RegisteredDocument:
-    """Document local déjà synchronisé avec le backend."""
+    """Document local deja synchronise avec le backend."""
 
     id: int
     original_filename: str
@@ -24,7 +24,7 @@ class RegisteredDocument:
 
 
 class KioskWorkflowService:
-    """Orchestre le parcours borne sans injecter de logique métier dans l'UI."""
+    """Orchestre le parcours borne sans injecter de logique metier dans l'UI."""
 
     def __init__(self, api_client: ApiClient, config: ClientStationConfig) -> None:
         self.api_client = api_client
@@ -48,8 +48,11 @@ class KioskWorkflowService:
     def load_email_documents(self, sender_email: str | None = None) -> list[LocalPdfDocument]:
         return self.email_service.fetch_pdf_attachments(sender_email)
 
+    def resolve_page_selection(self, total_pages: int, raw_selection: str | None) -> tuple[str | None, int]:
+        return self.print_service.resolve_page_selection(total_pages, raw_selection)
+
     def cleanup_session_artifacts(self) -> None:
-        """Nettoie les artefacts temporaires liés à la session de borne."""
+        """Nettoie les artefacts temporaires lies a la session de borne."""
 
         self.email_service.clear_session_cache()
 
@@ -74,16 +77,24 @@ class KioskWorkflowService:
             source_label=created.get("source_label") or "",
         )
 
-    def print_registered_document(self, document: RegisteredDocument, context_label: str) -> tuple[dict, PrintResult]:
+    def print_registered_document(
+        self,
+        document: RegisteredDocument,
+        context_label: str,
+        selected_pages: str | None = None,
+    ) -> tuple[dict, PrintResult]:
+        normalized_selection, selected_page_count = self.resolve_page_selection(document.page_count, selected_pages)
         job = self.api_client.post(
             f"/documents/{document.id}/print",
             {
                 "station_code": self.config.station_code,
                 "printer_name": self.config.printer_name,
                 "administrative_context": context_label,
+                "selected_pages": normalized_selection,
+                "selected_page_count": selected_page_count,
             },
         )
-        result = self.print_service.print_pdf(document.local_path)
+        result = self.print_service.print_pdf(document.local_path, normalized_selection)
         self.api_client.post(
             f"/documents/jobs/{job['id']}/status",
             {"status": "printed" if result.success else "failed", "failure_reason": None if result.success else result.message},

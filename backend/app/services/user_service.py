@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -26,7 +27,7 @@ class UserService:
     def list_users(self) -> list[UserListItem]:
         users: list[UserListItem] = []
         for client in self.repository.list_all():
-            quota = self.quota_service.build_quota_status(client)
+            quota = self._safe_quota_status(client)
             data = UserRead.model_validate(client).model_dump()
             data["full_name"] = f"{client.first_name} {client.last_name}"
             data["active_session_count"] = sum(1 for session in client.sessions if session.status == "active")
@@ -48,4 +49,32 @@ class UserService:
         return UserRead.model_validate(client)
 
     def get_quota_status(self, user_id: int) -> QuotaStatusRead:
-        return self.quota_service.get_quota_status(user_id)
+        client = self.repository.get_by_id(user_id)
+        if not client:
+            raise NotFoundError("Utilisateur introuvable.")
+        return self._safe_quota_status(client)
+
+    def _safe_quota_status(self, client: Client) -> QuotaStatusRead:
+        """Retourne un quota exploitable même si les tables de bonus ne sont pas prêtes.
+
+        Cela évite de bloquer complètement l'interface admin lorsqu'une migration
+        n'a pas encore été appliquée ou qu'un objet de quota est temporairement
+        indisponible. L'admin garde ainsi la liste des utilisateurs visible.
+        """
+
+        try:
+            return self.quota_service.build_quota_status(client)
+        except (OperationalError, ProgrammingError):
+            return QuotaStatusRead(
+                user_id=client.id,
+                email=client.email,
+                full_name=f"{client.first_name} {client.last_name}",
+                base_daily_quota=settings.default_daily_quota,
+                bonus_pages=0,
+                effective_quota=settings.default_daily_quota,
+                printed_pages_today=0,
+                remaining_pages=settings.default_daily_quota,
+                rejected_jobs_today=0,
+                can_print=client.is_active,
+                bonus_history=[],
+            )

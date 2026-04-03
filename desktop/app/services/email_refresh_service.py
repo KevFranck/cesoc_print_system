@@ -44,19 +44,21 @@ class EmailRefreshService:
             with imaplib.IMAP4_SSL(self.config.imap_host, self.config.imap_port) as client:
                 client.login(self.config.imap_username, self.config.imap_password)
                 client.select(self.config.mailbox_name)
-                status, data = client.search(None, "UNSEEN")
-                if status != "OK":
-                    return []
-                for msg_id in data[0].split()[-20:]:
+                for msg_id in self._search_candidate_messages(client):
                     status, msg_data = client.fetch(msg_id, "(RFC822)")
                     if status != "OK":
                         continue
-                    raw_bytes = msg_data[0][1]
-                    message = email.message_from_bytes(raw_bytes)
-                    sender = email.utils.parseaddr(message.get("From", ""))[1] or None
-                    if expected_sender_email and sender and sender.lower() != expected_sender_email.lower():
+                    raw_bytes = self._extract_raw_email_bytes(msg_data)
+                    if not raw_bytes:
                         continue
-                    documents.extend(self._extract_pdf_documents(message, sender, destination, documents))
+                    message = email.message_from_bytes(raw_bytes)
+                    sender = self._extract_sender_email(message)
+                    if not self._sender_matches(expected_sender_email, sender):
+                        continue
+                    extracted = self._extract_pdf_documents(message, sender, destination, documents)
+                    if not extracted:
+                        continue
+                    documents.extend(extracted)
                     client.store(msg_id, "+FLAGS", "\\Seen")
         except socket.gaierror as exc:
             raise RuntimeError(
@@ -140,6 +142,45 @@ class EmailRefreshService:
             )
             known_paths.add(resolved_target)
         return documents
+
+    def _search_candidate_messages(self, client: imaplib.IMAP4_SSL) -> list[bytes]:
+        """Retourne les IDs des messages récents encore exploitables pour la session.
+
+        On priorise `UNSEEN`, puis `RECENT` en secours selon le serveur IMAP.
+        """
+
+        for criteria in ("UNSEEN", "RECENT"):
+            status, data = client.search(None, criteria)
+            if status == "OK" and data and data[0]:
+                return data[0].split()[-20:]
+        return []
+
+    def _extract_raw_email_bytes(self, msg_data: list[object]) -> bytes | None:
+        """Normalise la réponse IMAP pour récupérer le contenu brut du message."""
+
+        for item in msg_data:
+            if isinstance(item, tuple) and len(item) > 1 and isinstance(item[1], bytes):
+                return item[1]
+        return None
+
+    def _extract_sender_email(self, message: Message) -> str | None:
+        """Extrait l'adresse expéditeur utile pour filtrer les documents."""
+
+        for header_name in ("From", "Reply-To", "Sender"):
+            value = message.get(header_name, "")
+            sender = email.utils.parseaddr(value)[1]
+            if sender:
+                return sender.lower()
+        return None
+
+    def _sender_matches(self, expected_sender_email: str | None, sender_email: str | None) -> bool:
+        """Vérifie si le mail peut être associé à l'usager connecté."""
+
+        if not expected_sender_email:
+            return True
+        if not sender_email:
+            return False
+        return sender_email.strip().lower() == expected_sender_email.strip().lower()
 
     def _get_page_count(self, pdf_path: Path) -> int:
         """Met en cache le nombre de pages pour éviter les relectures répétées."""

@@ -24,6 +24,7 @@ class PrintJob(Base):
     document_id: Mapped[int | None] = mapped_column(ForeignKey("imported_documents.id"), nullable=True)
     document_name: Mapped[str] = mapped_column(String(180))
     page_count: Mapped[int] = mapped_column(Integer)
+    selected_pages: Mapped[str | None] = mapped_column(String(120), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="queued")
     administrative_context: Mapped[str] = mapped_column(String(255))
     printer_name: Mapped[str | None] = mapped_column(String(180), nullable=True)

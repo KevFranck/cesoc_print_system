@@ -25,7 +25,6 @@ class ClientRepository(BaseRepository):
             select(Client)
             .options(
                 selectinload(Client.sessions).selectinload(StationSession.station),
-                selectinload(Client.print_jobs),
             )
             .order_by(Client.created_at.desc())
         )

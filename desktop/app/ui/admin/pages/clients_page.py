@@ -42,6 +42,10 @@ class ClientsPage(QWidget):
         self.search = SearchField("Rechercher un client par nom, email ou demarche")
         self.search.textChanged.connect(self._render_table)
         left.addWidget(self.search)
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("MutedText")
+        self.status_label.setWordWrap(True)
+        left.addWidget(self.status_label)
 
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["Nom", "Email", "Pages restantes", "Sessions", "Demarche"])
@@ -120,7 +124,12 @@ class ClientsPage(QWidget):
         self.refresh()
 
     def refresh(self) -> None:
-        self.clients = self.service.get_clients()
+        try:
+            self.clients = self.service.get_clients()
+            self.status_label.setText(f"{len(self.clients)} utilisateur(s) charge(s).")
+        except Exception as exc:
+            self.clients = []
+            self.status_label.setText(f"Chargement impossible: {exc}")
         self._render_table()
         self._sync_detail_panel()
 
@@ -179,6 +188,7 @@ class ClientsPage(QWidget):
             or query in (client.get("email") or "").lower()
             or query in (client.get("administrative_note") or "").lower()
         ]
+        self.table.clearContents()
         self.table.setRowCount(len(filtered))
         for row, client in enumerate(filtered):
             name_item = QTableWidgetItem(client.get("full_name", ""))
@@ -190,6 +200,9 @@ class ClientsPage(QWidget):
             self.table.setItem(row, 4, QTableWidgetItem(client.get("administrative_note") or ""))
         if filtered:
             self.table.selectRow(0)
+        elif self.clients:
+            self.detail_name.setText("Aucun resultat")
+            self.detail_info.setText("Aucun utilisateur ne correspond au filtre actuel.")
 
     def _sync_detail_panel(self) -> None:
         selected_items = self.table.selectedItems()
