@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFrame,
     QLabel,
     QLineEdit,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from app.services.api_client import ApiClient
 from app.services.dashboard_service import AdminDashboardService
+from app.core.runtime import guarded_ui_action
 from app.ui.shared.widgets import FormField, PageHeader, ScrollSection, SearchField, SectionCard
 
 
@@ -50,6 +52,9 @@ class ClientsPage(QWidget):
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["Nom", "Email", "Pages restantes", "Sessions", "Demarche"])
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self._sync_detail_panel)
         self.table.setMinimumHeight(440)
         left.addWidget(self.table)
@@ -87,6 +92,21 @@ class ClientsPage(QWidget):
         bonus_layout.addWidget(grant_button)
         right.addWidget(bonus_card)
 
+        password_card = QFrame()
+        password_card.setObjectName("SectionCard")
+        password_layout = QVBoxLayout(password_card)
+        password_title = QLabel("Mot de passe")
+        password_title.setObjectName("SectionTitle")
+        password_help = QLabel("Reinitialise le mot de passe du client a: cesoc")
+        password_help.setObjectName("MutedText")
+        password_help.setWordWrap(True)
+        reset_button = QPushButton("Reinitialiser a cesoc")
+        reset_button.clicked.connect(self.reset_password)
+        password_layout.addWidget(password_title)
+        password_layout.addWidget(password_help)
+        password_layout.addWidget(reset_button)
+        right.addWidget(password_card)
+
         form_card = QFrame()
         form_card.setObjectName("SectionCard")
         form_layout = QVBoxLayout(form_card)
@@ -123,6 +143,7 @@ class ClientsPage(QWidget):
         layout.addWidget(splitter, 1)
         self.refresh()
 
+    @guarded_ui_action
     def refresh(self) -> None:
         try:
             self.clients = self.service.get_clients()
@@ -133,6 +154,7 @@ class ClientsPage(QWidget):
         self._render_table()
         self._sync_detail_panel()
 
+    @guarded_ui_action
     def create_client(self) -> None:
         payload = {
             "first_name": self.first_name.text().strip(),
@@ -152,12 +174,12 @@ class ClientsPage(QWidget):
             widget.clear()
         self.refresh()
 
+    @guarded_ui_action
     def grant_bonus(self) -> None:
-        selected_items = self.table.selectedItems()
-        if not selected_items:
+        client = self._selected_client()
+        if not client:
             QMessageBox.warning(self, "Selection requise", "Selectionne d'abord un utilisateur.")
             return
-        client = selected_items[0].data(Qt.ItemDataRole.UserRole)
         try:
             pages = int(self.bonus_pages.text().strip())
         except ValueError:
@@ -178,6 +200,23 @@ class ClientsPage(QWidget):
         self.bonus_reason.clear()
         self.refresh()
 
+    @guarded_ui_action
+    def reset_password(self) -> None:
+        client = self._selected_client()
+        if not client:
+            QMessageBox.warning(self, "Selection requise", "Selectionne d'abord un utilisateur.")
+            return
+        result = self.service.reset_user_password(int(client["id"]))
+        if not result:
+            QMessageBox.warning(self, "Erreur", "Impossible de reinitialiser le mot de passe.")
+            return
+        QMessageBox.information(
+            self,
+            "Mot de passe reinitialise",
+            "Le mot de passe temporaire est maintenant: cesoc\nL'utilisateur devra le modifier ensuite.",
+        )
+
+    @guarded_ui_action
     def _render_table(self) -> None:
         query = self.search.text().strip().lower()
         filtered = [
@@ -191,26 +230,30 @@ class ClientsPage(QWidget):
         self.table.clearContents()
         self.table.setRowCount(len(filtered))
         for row, client in enumerate(filtered):
-            name_item = QTableWidgetItem(client.get("full_name", ""))
-            name_item.setData(Qt.ItemDataRole.UserRole, client)
-            self.table.setItem(row, 0, name_item)
-            self.table.setItem(row, 1, QTableWidgetItem(client.get("email") or ""))
-            self.table.setItem(row, 2, QTableWidgetItem(str(client.get("remaining_pages", 0))))
-            self.table.setItem(row, 3, QTableWidgetItem(str(client.get("active_session_count", 0))))
-            self.table.setItem(row, 4, QTableWidgetItem(client.get("administrative_note") or ""))
+            values = [
+                client.get("full_name", ""),
+                client.get("email") or "",
+                str(client.get("remaining_pages", 0)),
+                str(client.get("active_session_count", 0)),
+                client.get("administrative_note") or "",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.ItemDataRole.UserRole, client)
+                self.table.setItem(row, column, item)
         if filtered:
             self.table.selectRow(0)
         elif self.clients:
             self.detail_name.setText("Aucun resultat")
             self.detail_info.setText("Aucun utilisateur ne correspond au filtre actuel.")
 
+    @guarded_ui_action
     def _sync_detail_panel(self) -> None:
-        selected_items = self.table.selectedItems()
-        if not selected_items:
+        client = self._selected_client()
+        if not client:
             self.detail_name.setText("Aucun client selectionne")
             self.detail_info.setText("Selectionne une ligne pour afficher les details du dossier.")
             return
-        client = selected_items[0].data(Qt.ItemDataRole.UserRole)
         quota = self.service.get_quota_status(int(client["id"]))
         self.detail_name.setText(client.get("full_name", ""))
         self.detail_info.setText(
@@ -223,3 +266,12 @@ class ClientsPage(QWidget):
             f"Sessions actives: {client.get('active_session_count', 0)}\n"
             f"Demarche: {client.get('administrative_note') or 'Non renseignee'}"
         )
+
+    def _selected_client(self) -> dict | None:
+        selected_items = self.table.selectedItems()
+        if not selected_items:
+            return None
+        row = selected_items[0].row()
+        item = self.table.item(row, 0) or selected_items[0]
+        client = item.data(Qt.ItemDataRole.UserRole)
+        return client if isinstance(client, dict) else None

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.core.runtime import guarded_ui_action
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.services.api_client import ApiClient
@@ -42,10 +43,12 @@ class HistoryPage(QWidget):
         root_layout.addWidget(ScrollSection(content))
         self.refresh()
 
+    @guarded_ui_action
     def refresh(self) -> None:
         self.jobs = self.service.get_print_jobs()
         self._render_table()
 
+    @guarded_ui_action
     def _render_table(self) -> None:
         query = self.search.text().strip().lower()
         filtered = [
@@ -66,6 +69,7 @@ class HistoryPage(QWidget):
             self.table.setItem(row, 4, QTableWidgetItem(job.get("status", "")))
             self.table.setItem(row, 5, QTableWidgetItem(job.get("administrative_context", "")))
 
+    @guarded_ui_action
     def _export_history(self) -> None:
         target, _ = QFileDialog.getSaveFileName(self, "Exporter l'historique", "cesoc-history.csv", "CSV (*.csv)")
         if not target:

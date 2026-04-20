@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -29,6 +28,11 @@ class PrintService:
 
     def __init__(self, config: ClientStationConfig) -> None:
         self.config = config
+        self._sumatra_candidates = [
+            Path("C:/Tools/SumatraPDF/SumatraPDF.exe"),
+            Path("C:/Program Files/SumatraPDF/SumatraPDF.exe"),
+            Path("C:/Program Files (x86)/SumatraPDF/SumatraPDF.exe"),
+        ]
 
     def resolve_page_selection(self, total_pages: int, raw_selection: str | None) -> tuple[str | None, int]:
         """Valide une saisie de type `1-3,5` et renvoie une version normalisee."""
@@ -61,7 +65,17 @@ class PrintService:
         normalized = ",".join(str(page_number) for page_number in sorted(selected_pages))
         return normalized, len(selected_pages)
 
-    def print_pdf(self, pdf_path: str, selected_pages: str | None = None) -> PrintResult:
+    def resolve_copy_count(self, raw_copy_count: str | None) -> int:
+        if not raw_copy_count or not raw_copy_count.strip():
+            return 1
+        if not raw_copy_count.strip().isdigit():
+            raise ValueError("Le nombre de copies est invalide.")
+        copy_count = int(raw_copy_count.strip())
+        if copy_count < 1 or copy_count > 20:
+            raise ValueError("Le nombre de copies doit etre compris entre 1 et 20.")
+        return copy_count
+
+    def print_pdf(self, pdf_path: str, selected_pages: str | None = None, copy_count: int = 1) -> PrintResult:
         temp_subset_path: Path | None = None
         effective_path = pdf_path
         try:
@@ -69,30 +83,67 @@ class PrintService:
                 temp_subset_path = self._build_subset_pdf(pdf_path, selected_pages)
                 effective_path = str(temp_subset_path)
 
-            if self.config.pdf_print_tool_path and Path(self.config.pdf_print_tool_path).exists():
-                return self._print_with_sumatra(effective_path)
-            if os.name == "nt":
-                try:
-                    os.startfile(effective_path, "print")  # type: ignore[attr-defined]
-                    return PrintResult(True, "Impression lancee via le shell Windows.")
-                except OSError as exc:
-                    return PrintResult(False, f"Echec impression Windows: {exc}")
-            return PrintResult(False, "Impression Windows non disponible sur ce systeme.")
+            sumatra_path = self._resolve_sumatra_path()
+            if sumatra_path:
+                printer_validation = self._validate_printer_name()
+                if printer_validation:
+                    return printer_validation
+                return self._print_with_sumatra(effective_path, sumatra_path, copy_count)
+            return PrintResult(
+                False,
+                "Aucun moteur d'impression silencieux n'est disponible. "
+                "Installez SumatraPDF ou configurez `pdf_print_tool_path` vers son executable.",
+            )
         finally:
             if temp_subset_path and temp_subset_path.exists():
                 temp_subset_path.unlink(missing_ok=True)
 
-    def _print_with_sumatra(self, pdf_path: str) -> PrintResult:
+    def _resolve_sumatra_path(self) -> Path | None:
+        configured_path = Path(self.config.pdf_print_tool_path) if self.config.pdf_print_tool_path else None
+        if configured_path and configured_path.exists():
+            return configured_path
+        return next((path for path in self._sumatra_candidates if path.exists()), None)
+
+    def _validate_printer_name(self) -> PrintResult | None:
+        if not self.config.printer_name or not self.config.printer_name.strip():
+            return PrintResult(False, "Aucune imprimante n'est configuree pour cette borne.")
+
+        installed_printers = self._list_installed_printers()
+        if installed_printers and self.config.printer_name not in installed_printers:
+            printer_list = ", ".join(installed_printers)
+            return PrintResult(
+                False,
+                f"Imprimante '{self.config.printer_name}' introuvable sur ce poste. Disponibles: {printer_list}",
+            )
+        return None
+
+    def _list_installed_printers(self) -> list[str]:
         command = [
-            self.config.pdf_print_tool_path or "",
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Add-Type -AssemblyName System.Drawing; [System.Drawing.Printing.PrinterSettings]::InstalledPrinters | ForEach-Object { $_ }",
+        ]
+        try:
+            completed = subprocess.run(command, check=True, capture_output=True, text=True, timeout=10)
+        except Exception:
+            return []
+        return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+
+    def _print_with_sumatra(self, pdf_path: str, executable_path: Path, copy_count: int) -> PrintResult:
+        command = [
+            str(executable_path),
             "-print-to",
             self.config.printer_name or "",
+            "-print-settings",
+            f"{copy_count}x",
             "-silent",
             pdf_path,
         ]
         try:
             completed = subprocess.run(command, check=True, capture_output=True, text=True, timeout=45)
-            return PrintResult(True, completed.stdout.strip() or "Impression Sumatra terminee.")
+            copies_label = "copie" if copy_count == 1 else "copies"
+            return PrintResult(True, completed.stdout.strip() or f"Impression Sumatra terminee ({copy_count} {copies_label}).")
         except Exception as exc:  # pragma: no cover - depends on workstation state
             return PrintResult(False, f"Echec SumatraPDF: {exc}")
 

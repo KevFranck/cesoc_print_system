@@ -1,0 +1,15 @@
+period,daily
+report_jobs_count,2
+report_pages_count,2
+success_count,1
+failed_count,1
+unique_users,1
+average_pages_per_job,1.0
+
+PERIOD_POINTS
+label,jobs_count,pages_count,success_count,failed_count,unique_users
+2026-04-09,2,2,1,1,1
+
+TOP_USERS
+user_id,client_name,email,jobs_count,pages_count,failed_count
+1,kevin owona,kf.owona@gmail.com,2,2,1

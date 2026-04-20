@@ -10,6 +10,27 @@ class UserCreate(ClientCreate):
     """Alias métier pour la création d'un utilisateur borne."""
 
     email: EmailStr
+    password: str | None = Field(default=None, min_length=4, max_length=100)
+
+
+class UserRegister(BaseModel):
+    """Inscription autonome depuis la borne."""
+
+    first_name: str = Field(min_length=2, max_length=100)
+    last_name: str = Field(min_length=2, max_length=100)
+    email: EmailStr
+    phone: str | None = Field(default=None, max_length=50)
+    password: str = Field(min_length=4, max_length=100)
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=100)
+
+
+class UserPasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=100)
+    new_password: str = Field(min_length=4, max_length=100)
 
 
 class UserRead(ClientRead):

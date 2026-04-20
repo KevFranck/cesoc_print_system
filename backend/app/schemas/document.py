@@ -44,6 +44,7 @@ class DocumentPrintRequest(BaseModel):
     administrative_context: str = Field(min_length=3, max_length=255)
     selected_pages: str | None = Field(default=None, max_length=120)
     selected_page_count: int | None = Field(default=None, ge=1, le=1000)
+    copy_count: int = Field(default=1, ge=1, le=20)
 
 
 class PrintJobStatusUpdate(BaseModel):

@@ -21,3 +21,8 @@ class ConflictError(AppError):
 class ValidationError(AppError):
     def __init__(self, detail: str) -> None:
         super().__init__(status.HTTP_400_BAD_REQUEST, detail)
+
+
+class AuthenticationError(AppError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(status.HTTP_401_UNAUTHORIZED, detail)

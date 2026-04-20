@@ -9,5 +9,6 @@
   "imap_port": 993,
   "imap_username": "franckkevinowona8@gmail.com",
   "imap_password": "jbbb wxpn vpfn wcdd",
-  "mailbox_name": "INBOX"
+  "mailbox_name": "INBOX",
+  "enable_embedded_pdf_preview": false
 }

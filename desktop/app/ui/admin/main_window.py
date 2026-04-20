@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
+from app.core.runtime import guarded_ui_action
 from app.services.api_client import ApiClient
 from app.ui.admin.pages.clients_page import ClientsPage
 from app.ui.admin.pages.dashboard_page import DashboardPage
@@ -83,6 +84,7 @@ class AdminMainWindow(QMainWindow):
         layout.addWidget(footer)
         return frame
 
+    @guarded_ui_action
     def _switch_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
         for idx, button in enumerate(self.nav_buttons):

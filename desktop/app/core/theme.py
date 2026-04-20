@@ -17,7 +17,7 @@ def build_stylesheet() -> str:
     }
     QFrame#Sidebar {
         background: #16212f;
-        border-radius: 24px;
+        border-radius: 8px;
     }
     QLabel#SidebarTitle {
         color: #ffffff;
@@ -38,7 +38,7 @@ def build_stylesheet() -> str:
         border: none;
         text-align: left;
         padding: 12px 14px;
-        border-radius: 14px;
+        border-radius: 8px;
         font-weight: 600;
     }
     QPushButton#NavButton:hover, QPushButton#NavButton:checked {
@@ -48,7 +48,7 @@ def build_stylesheet() -> str:
     QFrame#TopBar, QFrame#Card, QFrame#HeroCard, QFrame#SectionCard {
         background: #172231;
         border: 1px solid #253446;
-        border-radius: 20px;
+        border-radius: 8px;
     }
     QFrame#HeroCard {
         background: #1a2738;
@@ -73,6 +73,11 @@ def build_stylesheet() -> str:
     QLabel#MutedText {
         color: #9cabc0;
     }
+    QLabel#QuotaAlertText {
+        color: #ff6b6b;
+        font-size: 16px;
+        font-weight: 700;
+    }
     QLabel#MetricValue {
         font-size: 30px;
         font-weight: 700;
@@ -94,7 +99,7 @@ def build_stylesheet() -> str:
         background: #3d6f9b;
         color: white;
         border: none;
-        border-radius: 14px;
+        border-radius: 8px;
         padding: 12px 16px;
         font-weight: 600;
     }
@@ -117,7 +122,7 @@ def build_stylesheet() -> str:
         background: #1b2838;
         color: #bfd0e1;
         border: 1px solid #314255;
-        border-radius: 16px;
+        border-radius: 8px;
         padding: 10px 18px;
         min-width: 120px;
     }
@@ -133,13 +138,13 @@ def build_stylesheet() -> str:
     QPushButton#KioskPrimaryButton, QPushButton#KioskChoiceButton {
         min-height: 64px;
         font-size: 18px;
-        border-radius: 18px;
+        border-radius: 8px;
     }
     QPushButton#KioskGhostButton {
         background: transparent;
         color: #d3e1ef;
         border: 1px solid #3a4e66;
-        border-radius: 16px;
+        border-radius: 8px;
         padding: 10px 18px;
         font-weight: 600;
     }
@@ -168,7 +173,7 @@ def build_stylesheet() -> str:
         color: #afbccd;
     }
     QLabel#ResultBadgeNeutral, QLabel#ResultBadgeSuccess, QLabel#ResultBadgeError {
-        border-radius: 16px;
+        border-radius: 8px;
         padding: 8px 18px;
         font-size: 12px;
         font-weight: 700;
@@ -193,7 +198,7 @@ def build_stylesheet() -> str:
     QLineEdit, QTextEdit, QComboBox {
         background: #141f2d;
         border: 1px solid #34465a;
-        border-radius: 14px;
+        border-radius: 8px;
         padding: 12px 14px;
         color: #eef4fb;
     }
@@ -203,7 +208,7 @@ def build_stylesheet() -> str:
     QTableWidget {
         background: #141f2d;
         border: 1px solid #253446;
-        border-radius: 16px;
+        border-radius: 8px;
         gridline-color: #213143;
         selection-background-color: #30506d;
         selection-color: #f6fbff;
@@ -212,13 +217,13 @@ def build_stylesheet() -> str:
     QListWidget {
         background: #141f2d;
         border: 1px solid #253446;
-        border-radius: 16px;
+        border-radius: 8px;
         color: #f1f6fd;
         padding: 8px;
     }
     QListWidget::item {
         padding: 10px;
-        border-radius: 12px;
+        border-radius: 8px;
     }
     QListWidget::item:selected {
         background: #30506d;

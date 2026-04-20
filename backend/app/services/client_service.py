@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.core.config import settings
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.client import Client
 from app.repositories.client_repository import ClientRepository
 from app.schemas.client import ClientCreate, ClientListItem, ClientRead, RemainingPagesRead
@@ -14,7 +15,9 @@ class ClientService:
         self.repository = ClientRepository(db)
 
     def create_client(self, payload: ClientCreate) -> ClientRead:
-        client = Client(**payload.model_dump())
+        if payload.email and self.repository.get_by_email(payload.email):
+            raise ConflictError("Un client avec cet email existe deja.")
+        client = Client(**payload.model_dump(), hashed_password=hash_password("cesoc"))
         created = self.repository.create(client)
         return ClientRead.model_validate(created)
 

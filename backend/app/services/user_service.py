@@ -3,12 +3,16 @@ from __future__ import annotations
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password, verify_password
 from app.core.config import settings
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError, ValidationError
 from app.models.client import Client
 from app.repositories.client_repository import ClientRepository
-from app.schemas.user import QuotaStatusRead, UserCreate, UserListItem, UserRead
+from app.schemas.user import QuotaStatusRead, UserCreate, UserLogin, UserPasswordChange, UserRegister, UserListItem, UserRead
 from app.services.quota_service import QuotaService
+
+
+DEFAULT_USER_PASSWORD = "cesoc"
 
 
 class UserService:
@@ -21,8 +25,49 @@ class UserService:
     def create_user(self, payload: UserCreate) -> UserRead:
         if payload.email and self.repository.get_by_email(payload.email):
             raise ConflictError("Un utilisateur avec cet email existe deja.")
-        created = self.repository.create(Client(**payload.model_dump()))
+        data = payload.model_dump()
+        password = data.pop("password") or DEFAULT_USER_PASSWORD
+        created = self.repository.create(Client(**data, hashed_password=hash_password(password)))
         return UserRead.model_validate(created)
+
+    def register_user(self, payload: UserRegister) -> UserRead:
+        if self.repository.get_by_email(payload.email):
+            raise ConflictError("Un utilisateur avec cet email existe deja.")
+        data = payload.model_dump()
+        password = data.pop("password")
+        data["administrative_note"] = "Compte cree par l'utilisateur"
+        created = self.repository.create(Client(**data, hashed_password=hash_password(password)))
+        return UserRead.model_validate(created)
+
+    def authenticate_user(self, payload: UserLogin) -> UserRead:
+        client = self.repository.get_by_email(payload.email)
+        if not client or not client.is_active:
+            raise AuthenticationError("Email ou mot de passe incorrect.")
+        hashed_password = client.hashed_password or hash_password(DEFAULT_USER_PASSWORD)
+        if not verify_password(payload.password, hashed_password):
+            raise AuthenticationError("Email ou mot de passe incorrect.")
+        return UserRead.model_validate(client)
+
+    def change_password(self, user_id: int, payload: UserPasswordChange) -> UserRead:
+        client = self.repository.get_by_id(user_id)
+        if not client:
+            raise NotFoundError("Utilisateur introuvable.")
+        hashed_password = client.hashed_password or hash_password(DEFAULT_USER_PASSWORD)
+        if not verify_password(payload.current_password, hashed_password):
+            raise AuthenticationError("Mot de passe actuel incorrect.")
+        if payload.new_password == DEFAULT_USER_PASSWORD:
+            raise ValidationError("Choisis un mot de passe plus robuste que le mot de passe par defaut.")
+        client.hashed_password = hash_password(payload.new_password)
+        updated = self.repository.save(client)
+        return UserRead.model_validate(updated)
+
+    def reset_password(self, user_id: int) -> UserRead:
+        client = self.repository.get_by_id(user_id)
+        if not client:
+            raise NotFoundError("Utilisateur introuvable.")
+        client.hashed_password = hash_password(DEFAULT_USER_PASSWORD)
+        updated = self.repository.save(client)
+        return UserRead.model_validate(updated)
 
     def list_users(self) -> list[UserListItem]:
         users: list[UserListItem] = []

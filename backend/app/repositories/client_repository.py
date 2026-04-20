@@ -20,6 +20,12 @@ class ClientRepository(BaseRepository):
         self.db.refresh(client)
         return client
 
+    def save(self, client: Client) -> Client:
+        self.db.add(client)
+        self.db.commit()
+        self.db.refresh(client)
+        return client
+
     def list_all(self) -> list[Client]:
         stmt = (
             select(Client)

@@ -95,6 +95,9 @@ class AdminDashboardService:
     def grant_bonus_pages(self, user_id: int, payload: dict) -> dict | None:
         return self.api_client.safe_post(f"/users/{user_id}/grant-bonus-pages", payload)
 
+    def reset_user_password(self, user_id: int) -> dict | None:
+        return self.api_client.safe_post(f"/users/{user_id}/reset-password", {})
+
     def export_report_csv(self, report: dict, destination: Path) -> None:
         """Exporte un rapport consolidé au format CSV pour l'équipe admin."""
 

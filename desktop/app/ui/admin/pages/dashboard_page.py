@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.core.runtime import guarded_ui_action
 from app.services.api_client import ApiClient
 from app.services.dashboard_service import AdminDashboardService
 from app.ui.shared.widgets import HeroBanner, MetricCard, PageHeader, ScrollSection, SectionCard
@@ -25,6 +26,7 @@ class DashboardPage(QWidget):
         super().__init__()
         self.setObjectName("Page")
         self.service = AdminDashboardService(api_client)
+        self._refresh_in_progress = False
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -99,54 +101,71 @@ class DashboardPage(QWidget):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
-        self.timer.start(15000)
         self.current_period = "daily"
         self.current_report: dict = {}
         self.period_buttons["daily"].setChecked(True)
         root_layout.addWidget(ScrollSection(content))
         self.refresh()
 
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        if not self.timer.isActive():
+            self.timer.start(15000)
+
+    def hideEvent(self, event) -> None:  # type: ignore[override]
+        self.timer.stop()
+        super().hideEvent(event)
+
+    @guarded_ui_action
     def refresh(self) -> None:
-        report = self.service.get_report(self.current_period)
-        self.current_report = report
-        summary = report.get("totals", {})
-        self.cards["report_jobs_count"].set_value(str(report.get("report_jobs_count", 0)))
-        self.cards["report_pages_count"].set_value(str(report.get("report_pages_count", 0)))
-        self.cards["success_count"].set_value(str(report.get("success_count", 0)))
-        self.cards["failed_count"].set_value(str(report.get("failed_count", 0)))
-        self.cards["unique_users"].set_value(str(report.get("unique_users", 0)))
-        self.cards["average_pages_per_job"].set_value(str(report.get("average_pages_per_job", 0.0)))
-        self.hero.set_metrics(
-            f"{summary.get('pages_today', 0)} pages aujourd'hui",
-            f"{summary.get('total_clients', 0)} utilisateurs suivis",
-        )
-        self.status_label.setText(
-            "Le dashboard relie les volumes par periode, le taux d'echec, les usagers actifs et les alertes quota pour preparer les rapports d'activite."
-        )
-        period_points = report.get("period_points", [])
-        self.period_table.setRowCount(len(period_points))
-        for row, point in enumerate(period_points):
-            self.period_table.setItem(row, 0, QTableWidgetItem(point.get("label", "")))
-            self.period_table.setItem(row, 1, QTableWidgetItem(str(point.get("jobs_count", 0))))
-            self.period_table.setItem(row, 2, QTableWidgetItem(str(point.get("pages_count", 0))))
-            self.period_table.setItem(row, 3, QTableWidgetItem(str(point.get("success_count", 0))))
-            self.period_table.setItem(row, 4, QTableWidgetItem(str(point.get("failed_count", 0))))
-            self.period_table.setItem(row, 5, QTableWidgetItem(str(point.get("unique_users", 0))))
+        if self._refresh_in_progress:
+            return
+        self._refresh_in_progress = True
+        try:
+            report = self.service.get_report(self.current_period)
+            self.current_report = report
+            summary = report.get("totals", {})
+            self.cards["report_jobs_count"].set_value(str(report.get("report_jobs_count", 0)))
+            self.cards["report_pages_count"].set_value(str(report.get("report_pages_count", 0)))
+            self.cards["success_count"].set_value(str(report.get("success_count", 0)))
+            self.cards["failed_count"].set_value(str(report.get("failed_count", 0)))
+            self.cards["unique_users"].set_value(str(report.get("unique_users", 0)))
+            self.cards["average_pages_per_job"].set_value(str(report.get("average_pages_per_job", 0.0)))
+            self.hero.set_metrics(
+                f"{summary.get('pages_today', 0)} pages aujourd'hui",
+                f"{summary.get('total_clients', 0)} utilisateurs suivis",
+            )
+            self.status_label.setText(
+                "Le dashboard relie les volumes par periode, le taux d'echec, les usagers actifs et les alertes quota pour preparer les rapports d'activite."
+            )
+            period_points = report.get("period_points", [])
+            self.period_table.setRowCount(len(period_points))
+            for row, point in enumerate(period_points):
+                self.period_table.setItem(row, 0, QTableWidgetItem(point.get("label", "")))
+                self.period_table.setItem(row, 1, QTableWidgetItem(str(point.get("jobs_count", 0))))
+                self.period_table.setItem(row, 2, QTableWidgetItem(str(point.get("pages_count", 0))))
+                self.period_table.setItem(row, 3, QTableWidgetItem(str(point.get("success_count", 0))))
+                self.period_table.setItem(row, 4, QTableWidgetItem(str(point.get("failed_count", 0))))
+                self.period_table.setItem(row, 5, QTableWidgetItem(str(point.get("unique_users", 0))))
 
-        top_users = report.get("top_users", [])
-        self.users_table.setRowCount(len(top_users))
-        for row, user in enumerate(top_users):
-            self.users_table.setItem(row, 0, QTableWidgetItem(user.get("client_name", "")))
-            self.users_table.setItem(row, 1, QTableWidgetItem(user.get("email", "") or ""))
-            self.users_table.setItem(row, 2, QTableWidgetItem(str(user.get("jobs_count", 0))))
-            self.users_table.setItem(row, 3, QTableWidgetItem(str(user.get("pages_count", 0))))
-            self.users_table.setItem(row, 4, QTableWidgetItem(str(user.get("failed_count", 0))))
+            top_users = report.get("top_users", [])
+            self.users_table.setRowCount(len(top_users))
+            for row, user in enumerate(top_users):
+                self.users_table.setItem(row, 0, QTableWidgetItem(user.get("client_name", "")))
+                self.users_table.setItem(row, 1, QTableWidgetItem(user.get("email", "") or ""))
+                self.users_table.setItem(row, 2, QTableWidgetItem(str(user.get("jobs_count", 0))))
+                self.users_table.setItem(row, 3, QTableWidgetItem(str(user.get("pages_count", 0))))
+                self.users_table.setItem(row, 4, QTableWidgetItem(str(user.get("failed_count", 0))))
+        finally:
+            self._refresh_in_progress = False
 
+    @guarded_ui_action
     def _change_period(self, period: str) -> None:
         self.current_period = period
         self.period_buttons[period].setChecked(True)
         self.refresh()
 
+    @guarded_ui_action
     def _export_report(self) -> None:
         default_name = f"cesoc-report-{self.current_period}.csv"
         target, _ = QFileDialog.getSaveFileName(self, "Exporter le rapport", default_name, "CSV (*.csv)")

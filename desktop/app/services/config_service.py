@@ -31,6 +31,7 @@ class ClientStationConfig:
     imap_username: str | None = None
     imap_password: str | None = None
     mailbox_name: str = "INBOX"
+    enable_embedded_pdf_preview: bool = False
 
 
 class ConfigService:

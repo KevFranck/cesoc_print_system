@@ -65,6 +65,7 @@ class DocumentService:
             payload.administrative_context,
             selected_page_count=selected_page_count,
             selected_pages=normalized_selection,
+            copy_count=payload.copy_count,
         )
         document.status = "reserved"
         document.processed_at = datetime.now(timezone.utc)

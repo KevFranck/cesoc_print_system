@@ -22,13 +22,14 @@ class OverrideService:
         client = self.client_repository.get_by_id(user_id)
         if not client:
             raise NotFoundError("Utilisateur introuvable.")
+        today = datetime.now(timezone.utc).date()
         grant = BonusPageGrant(
             client_id=user_id,
             pages=payload.pages,
             reason=payload.reason,
             granted_by=payload.granted_by,
-            effective_date=datetime.now(timezone.utc).date(),
-            expires_on=payload.expires_on,
+            effective_date=today,
+            expires_on=today,
         )
         created = self.bonus_repository.create(grant)
         return BonusPageGrantRead.model_validate(created)

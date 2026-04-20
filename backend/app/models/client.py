@@ -23,6 +23,7 @@ class Client(TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(150), nullable=True, unique=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     administrative_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     sessions = relationship("StationSession", back_populates="client")

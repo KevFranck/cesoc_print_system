@@ -65,6 +65,7 @@ class PrintJobService:
         administrative_context: str,
         selected_page_count: int | None = None,
         selected_pages: str | None = None,
+        copy_count: int = 1,
     ) -> PrintJobRead:
         client = self.client_repository.get_by_id(document.owner_client_id or 0)
         if not client:
@@ -75,7 +76,8 @@ class PrintJobService:
         active_session = self.session_repository.get_active_for_station(station.id)
         if not active_session or active_session.client_id != client.id:
             raise ValidationError("Le poste n'a pas de session active correspondant a cet utilisateur.")
-        effective_page_count = selected_page_count or document.page_count
+        base_page_count = selected_page_count or document.page_count
+        effective_page_count = base_page_count * copy_count
         self.quota_service.ensure_pages_available(client, effective_page_count)
         job = PrintJob(
             client_id=client.id,
