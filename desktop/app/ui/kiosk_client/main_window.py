@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QComboBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -370,6 +371,10 @@ class KioskMainWindow(QMainWindow):
 
         self.copy_count_input = QLineEdit()
         self.copy_count_input.setPlaceholderText("Nombre de copies : 1")
+        self.duplex_mode_input = QComboBox()
+        self.duplex_mode_input.addItem("Recto uniquement", "simplex")
+        self.duplex_mode_input.addItem("Recto-verso", "duplex")
+        self.duplex_mode_input.addItem("Recto-verso bord court", "duplexshort")
         self.context_input = QLineEdit()
         self.context_input.setPlaceholderText("Exemple : CAF, titre de séjour, CV")
 
@@ -387,6 +392,7 @@ class KioskMainWindow(QMainWindow):
         info_layout.addWidget(self.quota_summary)
         info_layout.addWidget(self.page_selection_input)
         info_layout.addWidget(self.copy_count_input)
+        info_layout.addWidget(self.duplex_mode_input)
         info_layout.addWidget(self.context_input)
         info_layout.addStretch(1)
         info_layout.addWidget(back_button)
@@ -439,16 +445,22 @@ class KioskMainWindow(QMainWindow):
         self.result_message.setWordWrap(True)
         self.result_message.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        done_button = QPushButton("Se déconnecter")
-        done_button.setObjectName("KioskPrimaryButton")
-        done_button.clicked.connect(self._logout_user)
-        self.busy_widgets.append(done_button)
+        self.continue_after_print_button = QPushButton("Continuer")
+        self.continue_after_print_button.setObjectName("KioskPrimaryButton")
+        self.continue_after_print_button.clicked.connect(self._continue_after_print)
+        self.busy_widgets.append(self.continue_after_print_button)
+
+        self.done_after_print_button = QPushButton("Se déconnecter")
+        self.done_after_print_button.setObjectName("KioskPrimaryButton")
+        self.done_after_print_button.clicked.connect(self._logout_user)
+        self.busy_widgets.append(self.done_after_print_button)
 
         result_layout.addWidget(self.result_badge, 0, Qt.AlignmentFlag.AlignHCenter)
         result_layout.addWidget(self.result_title, 0, Qt.AlignmentFlag.AlignHCenter)
         result_layout.addWidget(self.result_message, 0, Qt.AlignmentFlag.AlignHCenter)
         result_layout.addSpacing(6)
-        result_layout.addWidget(done_button, 0, Qt.AlignmentFlag.AlignHCenter)
+        result_layout.addWidget(self.continue_after_print_button, 0, Qt.AlignmentFlag.AlignHCenter)
+        result_layout.addWidget(self.done_after_print_button, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(result_card, 0, Qt.AlignmentFlag.AlignCenter)
         return page
 
@@ -753,6 +765,7 @@ class KioskMainWindow(QMainWindow):
         )
         self.page_selection_input.clear()
         self.copy_count_input.setText("1")
+        self.duplex_mode_input.setCurrentIndex(0)
         self._clear_preview_pages()
         self._add_preview_placeholder("Chargement du document en cours…")
         self.preview_status.setText("Le document est en cours de préparation pour l'aperçu.")
@@ -862,6 +875,13 @@ class KioskMainWindow(QMainWindow):
                 self.page_selection_input.text().strip() or None,
             )
             copy_count = self.workflow.resolve_copy_count(self.copy_count_input.text().strip() or None)
+            duplex_mode = str(self.duplex_mode_input.currentData() or "simplex")
+            duplex_label = self.duplex_mode_input.currentText()
+            printer_ready = self.workflow.validate_printer_ready()
+            if not printer_ready.success:
+                QMessageBox.warning(self, "Imprimante indisponible", printer_ready.message)
+                self._set_busy(False)
+                return
         except ValueError as exc:
             QMessageBox.warning(self, "Parametres invalides", str(exc))
             self._set_busy(False)
@@ -872,6 +892,7 @@ class KioskMainWindow(QMainWindow):
                 context_label,
                 normalized_selection,
                 copy_count,
+                duplex_mode,
             )
         except ApiError as exc:
             QMessageBox.warning(self, "Erreur", exc.message)
@@ -883,24 +904,46 @@ class KioskMainWindow(QMainWindow):
         self.result_badge.setObjectName("ResultBadgeSuccess" if result.success else "ResultBadgeError")
         self.result_badge.style().unpolish(self.result_badge)
         self.result_badge.style().polish(self.result_badge)
-        self.result_message.setText(
-            f"Document : {self.state.registered_document.original_filename}\n"
-            f"Job #{job.get('id')}\n"
-            f"Pages imprimées : {selected_page_count}\n"
-            f"Sélection : {normalized_selection or 'Toutes les pages'}\n"
-            f"{result.message}\n\nLa session va maintenant se fermer pour protéger vos documents."
-        )
-        self.result_message.setText(
-            f"Document : {self.state.registered_document.original_filename}\n"
-            f"Job #{job.get('id')}\n"
-            f"Pages imprimees : {selected_page_count}\n"
-            f"Copies : {copy_count}\n"
-            f"Total debite : {selected_page_count * copy_count}\n"
-            f"Selection : {normalized_selection or 'Toutes les pages'}\n"
-            f"{result.message}"
-        )
+        self.done_after_print_button.setVisible(not result.success)
+        selection_label = normalized_selection or "Toutes les pages"
+        if result.success:
+            self.result_message.setText(
+                f"Document : {self.state.registered_document.original_filename}\n"
+                f"Pages : {selection_label}\n"
+                f"Copies : {copy_count}\n"
+                f"Total imprime : {selected_page_count * copy_count} page(s)\n"
+                f"Mode : {duplex_label}"
+            )
+        else:
+            self.result_message.setText(
+                f"Document : {self.state.registered_document.original_filename}\n"
+                f"Pages demandees : {selection_label}\n"
+                f"Copies : {copy_count}\n"
+                f"Mode : {duplex_label}\n"
+                f"Erreur : {result.message}"
+            )
         self._goto(self.result_page)
         self._set_busy(False)
+
+    @guarded_ui_action
+    def _continue_after_print(self) -> None:
+        if self.is_busy:
+            return
+        self.state.selected_local_document = None
+        self.state.registered_document = None
+        self.current_preview_pixmaps = []
+        self.documents_list.clearSelection()
+        self.document_summary.setText("Sélectionnez un document PDF.")
+        self.page_selection_input.clear()
+        self.copy_count_input.clear()
+        self.duplex_mode_input.setCurrentIndex(0)
+        self.context_input.clear()
+        self.preview_status.setText("")
+        self._clear_preview_pages()
+        self._add_preview_placeholder("Aperçu en attente.")
+        self.navigation_history.clear()
+        self.auto_logout_timer.stop()
+        self._goto(self.method_page, remember=False)
 
     def _reset_workflow(self) -> None:
         if self.state.active_session_id:
@@ -918,6 +961,7 @@ class KioskMainWindow(QMainWindow):
         self.documents_list.clear()
         self.page_selection_input.clear()
         self.copy_count_input.clear()
+        self.duplex_mode_input.setCurrentIndex(0)
         self.context_input.clear()
         self.documents_context.setText("Choisissez un document à imprimer.")
         self.document_summary.setText("Sélectionnez un document PDF.")
@@ -930,6 +974,7 @@ class KioskMainWindow(QMainWindow):
         self.result_badge.setObjectName("ResultBadgeNeutral")
         self.result_badge.style().unpolish(self.result_badge)
         self.result_badge.style().polish(self.result_badge)
+        self.done_after_print_button.setVisible(True)
         self.hero.set_metrics("Prêt", self.config.station_code)
         self._dispose_preview_worker()
         self._update_session_actions()
@@ -945,6 +990,7 @@ class KioskMainWindow(QMainWindow):
         self._reset_document_selection()
         self.page_selection_input.clear()
         self.copy_count_input.clear()
+        self.duplex_mode_input.setCurrentIndex(0)
         self.context_input.clear()
         self.auto_logout_timer.stop()
         self._goto(self.method_page, remember=False)
@@ -957,6 +1003,7 @@ class KioskMainWindow(QMainWindow):
         self._dispose_preview_worker()
         self.page_selection_input.clear()
         self.copy_count_input.clear()
+        self.duplex_mode_input.setCurrentIndex(0)
         self.context_input.clear()
         self.preview_status.setText("")
         self._clear_preview_pages()

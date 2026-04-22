@@ -1,0 +1,25 @@
+﻿Rapport CESOC Print System
+Genere le;2026-04-20 13:29
+Vue;Journalier
+
+SYNTHESE
+Indicateur;Valeur;Lecture
+Jobs total;6;Nombre de demandes d'impression dans le rapport
+Pages total;8;Volume de pages demandees ou imprimees
+Impressions reussies;5;Jobs termines avec succes
+Impressions en echec;1;Jobs a analyser ou relancer
+Taux de reussite;83.3%;Part des jobs reussis
+Taux d'echec;16.7%;Part des jobs en echec
+Usagers actifs;3;Utilisateurs differents sur la periode
+Moyenne pages par job;1.33;Charge moyenne par demande
+
+EVOLUTION PAR PERIODE
+Periode;Jobs;Pages;Impressions reussies;Impressions en echec;Taux de reussite;Moyenne pages/job;Usagers actifs
+2026-04-13;1;1;1;0;100.0%;1.0;1
+2026-04-09;5;7;4;1;80.0%;1.4;2
+
+UTILISATEURS LES PLUS ACTIFS
+ID;Utilisateur;Email;Jobs;Pages;Echecs;Taux d'echec;Lecture
+1;kevin owona;kf.owona@gmail.com;4;6;1;25.0%;6 page(s), 1 echec(s) a verifier
+6;TANOH CEDRICK;tanohcedrick18@gmail.com;1;1;0;0.0%;1 page(s), aucun echec
+2;sara christe;sc.bilong@gmail.com;1;1;0;0.0%;1 page(s), aucun echec

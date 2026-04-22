@@ -7,8 +7,8 @@
   "local_document_root": "runtime_documents",
   "imap_host": "imap.gmail.com",
   "imap_port": 993,
-  "imap_username": "franckkevinowona8@gmail.com",
-  "imap_password": "jbbb wxpn vpfn wcdd",
+  "imap_username": "votre-adresse@example.com",
+  "imap_password": "votre-mot-de-passe-application",
   "mailbox_name": "INBOX",
   "enable_embedded_pdf_preview": false
 }

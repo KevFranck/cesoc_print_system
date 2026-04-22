@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -29,6 +30,9 @@ class ClientsPage(QWidget):
         self.setObjectName("Page")
         self.service = AdminDashboardService(api_client)
         self.clients: list[dict] = []
+        self.filtered_clients: list[dict] = []
+        self.current_page = 1
+        self.page_size = 25
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -58,6 +62,21 @@ class ClientsPage(QWidget):
         self.table.itemSelectionChanged.connect(self._sync_detail_panel)
         self.table.setMinimumHeight(440)
         left.addWidget(self.table)
+
+        pagination = QHBoxLayout()
+        self.previous_page_button = QPushButton("Precedent")
+        self.previous_page_button.setObjectName("SecondaryButton")
+        self.previous_page_button.clicked.connect(self._previous_page)
+        self.page_label = QLabel("Page 1 / 1")
+        self.page_label.setObjectName("MutedText")
+        self.next_page_button = QPushButton("Suivant")
+        self.next_page_button.setObjectName("SecondaryButton")
+        self.next_page_button.clicked.connect(self._next_page)
+        pagination.addWidget(self.previous_page_button)
+        pagination.addWidget(self.page_label)
+        pagination.addStretch(1)
+        pagination.addWidget(self.next_page_button)
+        left.addLayout(pagination)
         splitter.addWidget(left_panel)
 
         right_panel = QWidget()
@@ -152,7 +171,6 @@ class ClientsPage(QWidget):
             self.clients = []
             self.status_label.setText(f"Chargement impossible: {exc}")
         self._render_table()
-        self._sync_detail_panel()
 
     @guarded_ui_action
     def create_client(self) -> None:
@@ -217,7 +235,9 @@ class ClientsPage(QWidget):
         )
 
     @guarded_ui_action
-    def _render_table(self) -> None:
+    def _render_table(self, *_args: object) -> None:
+        if _args:
+            self.current_page = 1
         query = self.search.text().strip().lower()
         filtered = [
             client
@@ -227,25 +247,41 @@ class ClientsPage(QWidget):
             or query in (client.get("email") or "").lower()
             or query in (client.get("administrative_note") or "").lower()
         ]
-        self.table.clearContents()
-        self.table.setRowCount(len(filtered))
-        for row, client in enumerate(filtered):
-            values = [
-                client.get("full_name", ""),
-                client.get("email") or "",
-                str(client.get("remaining_pages", 0)),
-                str(client.get("active_session_count", 0)),
-                client.get("administrative_note") or "",
-            ]
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.ItemDataRole.UserRole, client)
-                self.table.setItem(row, column, item)
-        if filtered:
-            self.table.selectRow(0)
-        elif self.clients:
+        self.filtered_clients = filtered
+        total_pages = self._total_pages()
+        self.current_page = min(max(self.current_page, 1), total_pages)
+        start = (self.current_page - 1) * self.page_size
+        page_clients = filtered[start : start + self.page_size]
+        self.table.blockSignals(True)
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.clearSelection()
+            self.table.clearContents()
+            self.table.setRowCount(len(page_clients))
+            for row, client in enumerate(page_clients):
+                values = [
+                    client.get("full_name", ""),
+                    client.get("email") or "",
+                    str(client.get("remaining_pages", 0)),
+                    str(client.get("active_session_count", 0)),
+                    client.get("administrative_note") or "",
+                ]
+                for column, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    item.setData(Qt.ItemDataRole.UserRole, client)
+                    self.table.setItem(row, column, item)
+            if page_clients:
+                self.table.selectRow(0)
+        finally:
+            self.table.setUpdatesEnabled(True)
+            self.table.blockSignals(False)
+
+        self._update_pagination_controls()
+        if not filtered and self.clients:
             self.detail_name.setText("Aucun resultat")
             self.detail_info.setText("Aucun utilisateur ne correspond au filtre actuel.")
+            return
+        self._sync_detail_panel()
 
     @guarded_ui_action
     def _sync_detail_panel(self) -> None:
@@ -275,3 +311,29 @@ class ClientsPage(QWidget):
         item = self.table.item(row, 0) or selected_items[0]
         client = item.data(Qt.ItemDataRole.UserRole)
         return client if isinstance(client, dict) else None
+
+    def _total_pages(self) -> int:
+        if not self.filtered_clients:
+            return 1
+        return max((len(self.filtered_clients) + self.page_size - 1) // self.page_size, 1)
+
+    def _update_pagination_controls(self) -> None:
+        total_pages = self._total_pages()
+        total_clients = len(self.filtered_clients)
+        self.page_label.setText(f"Page {self.current_page} / {total_pages} - {total_clients} client(s)")
+        self.previous_page_button.setEnabled(self.current_page > 1)
+        self.next_page_button.setEnabled(self.current_page < total_pages)
+
+    @guarded_ui_action
+    def _previous_page(self) -> None:
+        if self.current_page <= 1:
+            return
+        self.current_page -= 1
+        self._render_table()
+
+    @guarded_ui_action
+    def _next_page(self) -> None:
+        if self.current_page >= self._total_pages():
+            return
+        self.current_page += 1
+        self._render_table()

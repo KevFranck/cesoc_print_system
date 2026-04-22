@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -16,6 +17,15 @@ class PrintResult:
 
     success: bool
     message: str
+
+
+@dataclass(slots=True)
+class PrinterState:
+    name: str
+    port_name: str | None
+    printer_status: int | None
+    detected_error_state: int | None
+    work_offline: bool
 
 
 class PrintService:
@@ -75,7 +85,26 @@ class PrintService:
             raise ValueError("Le nombre de copies doit etre compris entre 1 et 20.")
         return copy_count
 
-    def print_pdf(self, pdf_path: str, selected_pages: str | None = None, copy_count: int = 1) -> PrintResult:
+    def validate_printer_ready(self) -> PrintResult:
+        """Verifie les preconditions locales avant de reserver un job backend."""
+
+        if not self._resolve_sumatra_path():
+            return PrintResult(
+                False,
+                "Le service d'impression silencieuse n'est pas disponible. Demandez a l'accueil de verifier SumatraPDF.",
+            )
+        printer_validation = self._validate_printer_name()
+        if printer_validation:
+            return printer_validation
+        return PrintResult(True, "Imprimante prete.")
+
+    def print_pdf(
+        self,
+        pdf_path: str,
+        selected_pages: str | None = None,
+        copy_count: int = 1,
+        duplex_mode: str = "simplex",
+    ) -> PrintResult:
         temp_subset_path: Path | None = None
         effective_path = pdf_path
         try:
@@ -85,10 +114,10 @@ class PrintService:
 
             sumatra_path = self._resolve_sumatra_path()
             if sumatra_path:
-                printer_validation = self._validate_printer_name()
-                if printer_validation:
-                    return printer_validation
-                return self._print_with_sumatra(effective_path, sumatra_path, copy_count)
+                printer_ready = self.validate_printer_ready()
+                if not printer_ready.success:
+                    return printer_ready
+                return self._print_with_sumatra(effective_path, sumatra_path, copy_count, duplex_mode)
             return PrintResult(
                 False,
                 "Aucun moteur d'impression silencieux n'est disponible. "
@@ -106,16 +135,87 @@ class PrintService:
 
     def _validate_printer_name(self) -> PrintResult | None:
         if not self.config.printer_name or not self.config.printer_name.strip():
-            return PrintResult(False, "Aucune imprimante n'est configuree pour cette borne.")
+            return PrintResult(
+                False,
+                "Aucune imprimante n'est configuree. Demandez a l'accueil de brancher ou selectionner une imprimante.",
+            )
+
+        printer_states = self._list_printer_states()
+        configured_printer = self.config.printer_name.strip()
+        if printer_states:
+            matching_printer = next((printer for printer in printer_states if printer.name == configured_printer), None)
+            if not matching_printer:
+                printer_list = ", ".join(printer.name for printer in printer_states)
+                return PrintResult(
+                    False,
+                    f"Imprimante '{configured_printer}' introuvable sur ce poste. Disponibles: {printer_list}",
+                )
+            if matching_printer.work_offline:
+                return PrintResult(
+                    False,
+                    f"Imprimante '{configured_printer}' hors ligne. Verifiez qu'elle est branchee, allumee et connectee.",
+                )
+            if matching_printer.printer_status == 7:
+                return PrintResult(
+                    False,
+                    f"Imprimante '{configured_printer}' indisponible. Verifiez sa connexion avant de relancer.",
+                )
+            if matching_printer.detected_error_state not in (None, 0, 2):
+                return PrintResult(
+                    False,
+                    f"Imprimante '{configured_printer}' signale une erreur. Verifiez le papier, l'encre et la connexion.",
+                )
+            return None
 
         installed_printers = self._list_installed_printers()
-        if installed_printers and self.config.printer_name not in installed_printers:
+        if not installed_printers:
+            return PrintResult(
+                False,
+                "Aucune imprimante detectee sur ce poste. Verifiez que l'imprimante est branchee, allumee et installee.",
+            )
+        if installed_printers and configured_printer not in installed_printers:
             printer_list = ", ".join(installed_printers)
             return PrintResult(
                 False,
-                f"Imprimante '{self.config.printer_name}' introuvable sur ce poste. Disponibles: {printer_list}",
+                f"Imprimante '{configured_printer}' introuvable sur ce poste. Disponibles: {printer_list}",
             )
         return None
+
+    def _list_printer_states(self) -> list[PrinterState]:
+        command = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_Printer | "
+            "Select-Object Name,PrinterStatus,WorkOffline,DetectedErrorState,PortName | "
+            "ConvertTo-Json -Compress",
+        ]
+        try:
+            completed = subprocess.run(command, check=True, capture_output=True, text=True, timeout=10)
+            raw_payload = completed.stdout.strip()
+            if not raw_payload:
+                return []
+            payload = json.loads(raw_payload)
+        except Exception:
+            return []
+
+        rows = payload if isinstance(payload, list) else [payload]
+        printers: list[PrinterState] = []
+        for row in rows:
+            if not isinstance(row, dict) or not row.get("Name"):
+                continue
+            printers.append(
+                PrinterState(
+                    name=str(row.get("Name")),
+                    port_name=str(row.get("PortName")) if row.get("PortName") is not None else None,
+                    printer_status=int(row["PrinterStatus"]) if row.get("PrinterStatus") is not None else None,
+                    detected_error_state=(
+                        int(row["DetectedErrorState"]) if row.get("DetectedErrorState") is not None else None
+                    ),
+                    work_offline=bool(row.get("WorkOffline")),
+                )
+            )
+        return printers
 
     def _list_installed_printers(self) -> list[str]:
         command = [
@@ -130,13 +230,22 @@ class PrintService:
             return []
         return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
 
-    def _print_with_sumatra(self, pdf_path: str, executable_path: Path, copy_count: int) -> PrintResult:
+    def _print_with_sumatra(
+        self,
+        pdf_path: str,
+        executable_path: Path,
+        copy_count: int,
+        duplex_mode: str,
+    ) -> PrintResult:
+        print_settings = [f"{copy_count}x"]
+        if duplex_mode in {"duplex", "duplexshort"}:
+            print_settings.append(duplex_mode)
         command = [
             str(executable_path),
             "-print-to",
             self.config.printer_name or "",
             "-print-settings",
-            f"{copy_count}x",
+            ",".join(print_settings),
             "-silent",
             pdf_path,
         ]

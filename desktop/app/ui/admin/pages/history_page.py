@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from app.core.runtime import guarded_ui_action
@@ -49,7 +50,7 @@ class HistoryPage(QWidget):
         self._render_table()
 
     @guarded_ui_action
-    def _render_table(self) -> None:
+    def _render_table(self, *_args: object) -> None:
         query = self.search.text().strip().lower()
         filtered = [
             job
@@ -71,7 +72,9 @@ class HistoryPage(QWidget):
 
     @guarded_ui_action
     def _export_history(self) -> None:
-        target, _ = QFileDialog.getSaveFileName(self, "Exporter l'historique", "cesoc-history.csv", "CSV (*.csv)")
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        default_name = f"cesoc-history-{timestamp}.csv"
+        target, _ = QFileDialog.getSaveFileName(self, "Exporter l'historique", default_name, "CSV (*.csv)")
         if not target:
             return
         self.service.export_jobs_csv(self.jobs, Path(target))

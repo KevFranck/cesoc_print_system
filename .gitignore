@@ -11,9 +11,12 @@ __pycache__/
 .env.local
 backend/.env
 desktop/app/config/client_config.json
+desktop/app/config/client_config.local.json
 
 backend/venv/
 desktop/venv/
+
+backend/_local_smoke.sqlite3
 
 dist/
 build/

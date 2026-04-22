@@ -50,6 +50,7 @@ class ClientRepository(BaseRepository):
         stmt = (
             select(func.coalesce(func.sum(PrintJob.page_count), 0))
             .where(PrintJob.client_id == client_id)
+            .where(PrintJob.status == "printed")
             .where(PrintJob.submitted_at >= day_start)
             .where(PrintJob.submitted_at <= day_end)
         )

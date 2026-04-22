@@ -104,6 +104,9 @@ class KioskWorkflowService:
     def resolve_copy_count(self, raw_copy_count: str | None) -> int:
         return self.print_service.resolve_copy_count(raw_copy_count)
 
+    def validate_printer_ready(self) -> PrintResult:
+        return self.print_service.validate_printer_ready()
+
     def cleanup_session_artifacts(self) -> None:
         """Nettoie les artefacts temporaires lies a la session de borne."""
 
@@ -136,6 +139,7 @@ class KioskWorkflowService:
         context_label: str,
         selected_pages: str | None = None,
         copy_count: int = 1,
+        duplex_mode: str = "simplex",
     ) -> tuple[dict, PrintResult]:
         normalized_selection, selected_page_count = self.resolve_page_selection(document.page_count, selected_pages)
         job = self.api_client.post(
@@ -149,7 +153,7 @@ class KioskWorkflowService:
                 "copy_count": copy_count,
             },
         )
-        result = self.print_service.print_pdf(document.local_path, normalized_selection, copy_count)
+        result = self.print_service.print_pdf(document.local_path, normalized_selection, copy_count, duplex_mode)
         self.api_client.post(
             f"/documents/jobs/{job['id']}/status",
             {"status": "printed" if result.success else "failed", "failure_reason": None if result.success else result.message},

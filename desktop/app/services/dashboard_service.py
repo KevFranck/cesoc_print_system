@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from datetime import datetime
 from pathlib import Path
 
 from app.services.api_client import ApiClient, ApiError
@@ -101,60 +102,95 @@ class AdminDashboardService:
     def export_report_csv(self, report: dict, destination: Path) -> None:
         """Exporte un rapport consolidé au format CSV pour l'équipe admin."""
 
-        with destination.open("w", newline="", encoding="utf-8") as csv_file:
+        period_labels = {"daily": "Journalier", "monthly": "Mensuel", "yearly": "Annuel"}
+        period = str(report.get("period") or "")
+        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+        jobs_count = int(report.get("report_jobs_count") or 0)
+        pages_count = int(report.get("report_pages_count") or 0)
+        success_count = int(report.get("success_count") or 0)
+        failed_count = int(report.get("failed_count") or 0)
+        top_user = self._top_user(report.get("top_users", []))
+        period_points = report.get("period_points", []) or [
+            {
+                "label": period_labels.get(period, period or "Non renseignee"),
+                "jobs_count": jobs_count,
+                "pages_count": pages_count,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "unique_users": report.get("unique_users", 0),
+            }
+        ]
+
+        with destination.open("w", newline="", encoding="utf-8-sig") as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow(["period", report.get("period", "")])
-            writer.writerow(["report_jobs_count", report.get("report_jobs_count", 0)])
-            writer.writerow(["report_pages_count", report.get("report_pages_count", 0)])
-            writer.writerow(["success_count", report.get("success_count", 0)])
-            writer.writerow(["failed_count", report.get("failed_count", 0)])
-            writer.writerow(["unique_users", report.get("unique_users", 0)])
-            writer.writerow(["average_pages_per_job", report.get("average_pages_per_job", 0.0)])
-            writer.writerow([])
-            writer.writerow(["PERIOD_POINTS"])
-            writer.writerow(["label", "jobs_count", "pages_count", "success_count", "failed_count", "unique_users"])
-            for point in report.get("period_points", []):
+            writer.writerow(
+                [
+                    "Vue",
+                    "Genere le",
+                    "Periode",
+                    "Jobs",
+                    "Pages",
+                    "Reussies",
+                    "Echecs",
+                    "Taux de reussite",
+                    "Moyenne pages/job",
+                    "Usagers actifs",
+                    "Total jobs",
+                    "Total pages",
+                    "Total reussies",
+                    "Total echecs",
+                    "Taux reussite total",
+                    "Usagers actifs total",
+                    "Top utilisateur",
+                    "Top utilisateur email",
+                    "Top utilisateur pages",
+                    "Top utilisateur echecs",
+                ]
+            )
+            for point in period_points:
+                point_jobs = int(point.get("jobs_count") or 0)
+                point_pages = int(point.get("pages_count") or 0)
                 writer.writerow(
                     [
+                        period_labels.get(period, period or "Non renseignee"),
+                        generated_at,
                         point.get("label", ""),
-                        point.get("jobs_count", 0),
-                        point.get("pages_count", 0),
+                        point_jobs,
+                        point_pages,
                         point.get("success_count", 0),
                         point.get("failed_count", 0),
+                        self._format_rate(point.get("success_count", 0), point_jobs),
+                        self._format_average(point_pages, point_jobs),
                         point.get("unique_users", 0),
-                    ]
-                )
-            writer.writerow([])
-            writer.writerow(["TOP_USERS"])
-            writer.writerow(["user_id", "client_name", "email", "jobs_count", "pages_count", "failed_count"])
-            for user in report.get("top_users", []):
-                writer.writerow(
-                    [
-                        user.get("user_id", 0),
-                        user.get("client_name", ""),
-                        user.get("email", ""),
-                        user.get("jobs_count", 0),
-                        user.get("pages_count", 0),
-                        user.get("failed_count", 0),
+                        jobs_count,
+                        pages_count,
+                        success_count,
+                        failed_count,
+                        self._format_rate(success_count, jobs_count),
+                        report.get("unique_users", 0),
+                        top_user.get("client_name", ""),
+                        top_user.get("email", ""),
+                        top_user.get("pages_count", 0),
+                        top_user.get("failed_count", 0),
                     ]
                 )
 
     def export_jobs_csv(self, jobs: list[dict], destination: Path) -> None:
         """Exporte l'historique détaillé des impressions."""
 
-        with destination.open("w", newline="", encoding="utf-8") as csv_file:
+        with destination.open("w", newline="", encoding="utf-8-sig") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(
                 [
-                    "id",
-                    "document_name",
-                    "client_name",
-                    "station_code",
-                    "page_count",
-                    "status",
-                    "administrative_context",
-                    "submitted_at",
-                    "printed_at",
+                    "ID job",
+                    "Document",
+                    "Client",
+                    "Poste",
+                    "Pages",
+                    "Statut",
+                    "Demarche",
+                    "Demande le",
+                    "Imprime le",
                 ]
             )
             for job in jobs:
@@ -171,3 +207,27 @@ class AdminDashboardService:
                         job.get("printed_at", ""),
                     ]
                 )
+
+    def _format_rate(self, numerator: object, denominator: object) -> str:
+        denominator_int = int(denominator or 0)
+        if denominator_int <= 0:
+            return "0%"
+        return f"{round((int(numerator or 0) / denominator_int) * 100, 1)}%"
+
+    def _format_average(self, numerator: object, denominator: object) -> str:
+        denominator_int = int(denominator or 0)
+        if denominator_int <= 0:
+            return "0"
+        return str(round(int(numerator or 0) / denominator_int, 2))
+
+    def _build_user_reading(self, user: dict) -> str:
+        pages = int(user.get("pages_count") or 0)
+        failed = int(user.get("failed_count") or 0)
+        if failed:
+            return f"{pages} page(s), {failed} echec(s) a verifier"
+        return f"{pages} page(s), aucun echec"
+
+    def _top_user(self, users: object) -> dict:
+        if not isinstance(users, list):
+            return {}
+        return max(users, key=lambda user: int(user.get("pages_count") or 0), default={})

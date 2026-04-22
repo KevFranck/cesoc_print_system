@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -40,7 +40,9 @@ class DashboardService:
         pages_today = int(
             self.db.scalar(
                 select(func.coalesce(func.sum(PrintJob.page_count), 0)).where(
-                    PrintJob.submitted_at >= day_start, PrintJob.submitted_at <= day_end
+                    PrintJob.status == "printed",
+                    PrintJob.submitted_at >= day_start,
+                    PrintJob.submitted_at <= day_end,
                 )
             )
             or 0
@@ -50,7 +52,11 @@ class DashboardService:
                 select(func.count(Client.id)).where(
                     Client.id.in_(
                         select(PrintJob.client_id)
-                        .where(PrintJob.submitted_at >= day_start, PrintJob.submitted_at <= day_end)
+                        .where(
+                            PrintJob.status == "printed",
+                            PrintJob.submitted_at >= day_start,
+                            PrintJob.submitted_at <= day_end,
+                        )
                         .group_by(PrintJob.client_id)
                         .having(func.sum(PrintJob.page_count) >= 8)
                     )
@@ -81,7 +87,8 @@ class DashboardService:
         if period not in {"daily", "monthly", "yearly"}:
             period = "daily"
 
-        jobs = self._get_report_jobs()
+        period_start, period_end = self._period_bounds(period)
+        jobs = self._get_report_jobs(period_start, period_end)
         grouped_metrics: dict[str, dict[str, int | set[int]]] = defaultdict(
             lambda: {
                 "jobs_count": 0,
@@ -179,10 +186,11 @@ class DashboardService:
             top_users=top_users,
         )
 
-    def _get_report_jobs(self) -> list[PrintJob]:
+    def _get_report_jobs(self, period_start: datetime, period_end: datetime) -> list[PrintJob]:
         stmt = (
             select(PrintJob)
             .options(selectinload(PrintJob.client))
+            .where(PrintJob.submitted_at >= period_start, PrintJob.submitted_at <= period_end)
             .order_by(PrintJob.submitted_at.desc())
         )
         return list(self.db.scalars(stmt))
@@ -190,7 +198,24 @@ class DashboardService:
     def _build_period_label(self, submitted_at: datetime, period: str) -> str:
         current = submitted_at.astimezone(timezone.utc)
         if period == "yearly":
-            return current.strftime("%Y")
-        if period == "monthly":
             return current.strftime("%Y-%m")
-        return current.strftime("%Y-%m-%d")
+        if period == "monthly":
+            return current.strftime("%Y-%m-%d")
+        return current.strftime("%H:00")
+
+    def _period_bounds(self, period: str) -> tuple[datetime, datetime]:
+        now = datetime.now(timezone.utc)
+        if period == "yearly":
+            start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+            end = datetime(now.year, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+            return start, end
+        if period == "monthly":
+            start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+            if now.month == 12:
+                next_month = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+            else:
+                next_month = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+            return start, next_month.replace(microsecond=0) - timedelta(microseconds=1)
+        day_start = datetime.combine(now.date(), time.min, tzinfo=timezone.utc)
+        day_end = datetime.combine(now.date(), time.max, tzinfo=timezone.utc)
+        return day_start, day_end
